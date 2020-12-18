@@ -12,16 +12,17 @@ module RedmineMessenger
 
       module InstanceMethods
         def send_messenger_create
-          channels = Messenger.channels_for_project project
+          #channels = Messenger.channels_for_project project
           url = Messenger.url_for_project project
 
           if Messenger.setting_for_project(project, :messenger_direct_users_messages)
             messenger_to_be_notified.each do |user|
-              channels.append "@#{user.login}" unless user == author
+              #channels.append "@#{user.login}" unless user == author
             end
           end
 
-          return unless channels.present? && url
+          #return unless channels.present? && url
+          return unless url
           return if is_private? && !Messenger.setting_for_project(project, :post_private_issues)
 
           set_language_if_valid Setting.default_language
@@ -55,27 +56,30 @@ module RedmineMessenger
               short: true
             }
           end
-
-          Messenger.speak l(:label_messenger_issue_created,
+          title_for_message = "Neues Ticket" # TODO: use label for multi language-support /locales
+          Messenger.speak title_for_message, l(:label_messenger_issue_created,
                             project_url: Messenger.project_url_markdown(project),
-                            url: send_messenger_mention_url(project, description),
+                            #url: send_messenger_mention_url(project, description),
+                            url: Messenger.issue_url_markdown(self, id, subject),
                             user: author),
-                          channels, url, attachment: attachment, project: project
+                          #channels, url, attachment: attachment, project: project
+                          url, attachment: attachment, project: project
         end
 
         def send_messenger_update
           return if current_journal.nil?
 
-          channels = Messenger.channels_for_project project
+          #channels = Messenger.channels_for_project project
           url = Messenger.url_for_project project
 
           if Messenger.setting_for_project(project, :messenger_direct_users_messages)
             messenger_to_be_notified.each do |user|
-              channels.append "@#{user.login}" unless user == current_journal.user
+              #channels.append "@#{user.login}" unless user == current_journal.user
             end
           end
 
-          return unless channels.present? && url && Messenger.setting_for_project(project, :post_updates)
+          #return unless channels.present? && url && Messenger.setting_for_project(project, :post_updates)
+          return unless url && Messenger.setting_for_project(project, :post_updates)
           return if is_private? && !Messenger.setting_for_project(project, :post_private_issues)
           return if current_journal.private_notes? && !Messenger.setting_for_project(project, :post_private_notes)
 
@@ -97,11 +101,14 @@ module RedmineMessenger
           fields.compact!
           attachment[:fields] = fields if fields.any?
 
-          Messenger.speak l(:label_messenger_issue_updated,
+          title_for_message = "Update"
+          Messenger.speak title_for_message, l(:label_messenger_issue_updated,
                             project_url: Messenger.project_url_markdown(project),
-                            url: send_messenger_mention_url(project, description),
+                            #url: send_messenger_mention_url(project, description),
+                            url: Messenger.issue_url_markdown(self, id, subject),
                             user: current_journal.user),
-                          channels, url, attachment: attachment, project: project
+                          #channels, url, attachment: attachment, project: project
+                          url, attachment: attachment, project: project
         end
 
         private

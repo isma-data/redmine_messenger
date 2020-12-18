@@ -27,10 +27,12 @@ class Messenger
       { only_path: true, script_name: Redmine::Utils.relative_url_root }
     end
 
-    def speak(msg, channels, url, options)
+    #def speak(msg, channels, url, options)
+    def speak_messenger_old(msg, url, options)
       url ||= RedmineMessenger.settings[:messenger_url]
-      return if url.blank? || channels.blank?
-
+      return if url.blank? #|| channels.blank?
+      Rails.logger.warn "DEBUG info: msg => #{msg}"
+      Rails.logger.warn "DEBUG info: url => #{url}"
       params = { text: msg, link_names: 1 }
       username = textfield_for_project(options[:project], :messenger_username)
       params[:username] = username if username.present?
@@ -44,22 +46,63 @@ class Messenger
         end
       end
 
-      channels.each do |channel|
-        uri = URI(url)
-        params[:channel] = channel
-        http_options = { use_ssl: uri.scheme == 'https' }
-        http_options[:verify_mode] = OpenSSL::SSL::VERIFY_NONE unless RedmineMessenger.setting?(:messenger_verify_ssl)
-        begin
-          req = Net::HTTP::Post.new uri
-          req.set_form_data payload: params.to_json
-          Net::HTTP.start(uri.hostname, uri.port, http_options) do |http|
-            response = http.request req
-            Rails.logger.warn(response.inspect) unless [Net::HTTPSuccess, Net::HTTPRedirection, Net::HTTPOK].include? response
-          end
-        rescue StandardError => e
-          Rails.logger.warn "cannot connect to #{url}"
-          Rails.logger.warn e
+      #channels.each do |channel|
+      uri = URI(url)
+      #params[:channel] = channel
+      http_options = { use_ssl: uri.scheme == 'https' }
+      http_options[:verify_mode] = OpenSSL::SSL::VERIFY_NONE unless RedmineMessenger.setting?(:messenger_verify_ssl)
+      begin
+        req = Net::HTTP::Post.new uri
+        req.set_form_data payload: params.to_json
+        Net::HTTP.start(uri.hostname, uri.port, http_options) do |http|
+          response = http.request req
+          Rails.logger.warn(response.inspect) unless [Net::HTTPSuccess, Net::HTTPRedirection, Net::HTTPOK].include? response
         end
+      rescue StandardError => e
+        Rails.logger.warn "cannot connect to #{url}"
+        Rails.logger.warn e
+      end
+    end
+
+
+    def getJson(title, msg, options)
+      params = { text: msg }
+      #params[:summary] = @summary if @summary
+      params[:title] = title
+      username = textfield_for_project(options[:project], :messenger_username)
+      params[:username] = username if username.present?
+      attachments = options[:attachment]&.any? ? [options[:attachment]] : []
+      facts_array = attachments.first[:fields]
+      # rename entries from value to fact (thats how msteams wants it)
+      params[:sections] = facts_array
+      Rails.logger.warn "info params-sections => #{params[:sections]}"
+      Rails.logger.warn "info params-title => #{params[:title]}"
+      icon = textfield_for_project options[:project], :messenger_icon
+      if icon.present?
+        if icon.start_with? ':'
+          params[:icon_emoji] = icon
+        else
+          params[:icon_url] = icon
+        end
+      end
+      #params[:themeColor] = @color if @color
+      #params[:potentialAction] = @potentialAction if @potentialAction
+      return params.to_json
+    end
+
+    def speak(title, msg, url, options, async = false)
+      begin
+        client = HTTPClient.new
+        client.ssl_config.cert_store.set_default_paths
+        client.ssl_config.ssl_version = :auto
+        if async
+          client.post_async url, getJson(title, msg, options), {'Content-Type' => 'application/json'}
+        else
+          client.post url, getJson(title, msg, options), {'Content-Type' => 'application/json'}
+        end
+      rescue Exception => e
+        Rails.logger.warn("cannot connect to #{url}")
+        Rails.logger.warn(e)
       end
     end
 
@@ -98,6 +141,10 @@ class Messenger
       "[#{name}](#{object_url obj})"
     end
 
+    def issue_url_markdown(obj, id, subject)
+      "[##{id} #{subject}](#{object_url obj})"
+    end
+
     def textfield_for_project(proj, config)
       return if proj.blank?
 
@@ -117,18 +164,18 @@ class Messenger
       ''
     end
 
-    def channels_for_project(proj)
-      return [] if proj.blank?
+    #def channels_for_project(proj)
+    #  return [] if proj.blank?
 
-      # project based
-      pm = MessengerSetting.find_by(project_id: proj.id)
-      if !pm.nil? && pm.messenger_channel.present?
-        return [] if pm.messenger_channel == '-'
-
-        return pm.messenger_channel.split(',').map!(&:strip).uniq
-      end
-      default_project_channels proj
-    end
+    #  # project based
+    #  pm = MessengerSetting.find_by(project_id: proj.id)
+    #  if !pm.nil? && pm.messenger_channel.present?
+    #    return [] if pm.messenger_channel == '-'
+    #
+    #    return pm.messenger_channel.split(',').map!(&:strip).uniq
+    #  end
+    #  default_project_channels proj
+    #end
 
     def setting_for_project(proj, config)
       return false if proj.blank?
@@ -288,17 +335,17 @@ class Messenger
       text.scan(/@[a-z0-9][a-z0-9_\-.]*/).uniq
     end
 
-    def default_project_channels(proj)
-      # parent project based
-      parent_channel = channels_for_project proj.parent
-      return parent_channel if parent_channel.present?
-      # system based
-      if RedmineMessenger.settings[:messenger_channel].present? &&
-         RedmineMessenger.settings[:messenger_channel] != '-'
-        return RedmineMessenger.settings[:messenger_channel].split(',').map!(&:strip).uniq
-      end
-
-      []
-    end
+   # def default_project_channels(proj)
+   #   # parent project based
+   #   parent_channel = channels_for_project proj.parent
+   #   return parent_channel if parent_channel.present?
+   #   # system based
+   #   if RedmineMessenger.settings[:messenger_channel].present? &&
+   #      RedmineMessenger.settings[:messenger_channel] != '-'
+   #     return RedmineMessenger.settings[:messenger_channel].split(',').map!(&:strip).uniq
+   #   end
+   #
+   #   []
+   # end
   end
 end
