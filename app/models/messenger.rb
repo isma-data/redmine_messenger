@@ -16,9 +16,9 @@ class Messenger
 
       # @see https://api.slack.com/reference/surfaces/formatting#escaping
 
-      text.gsub!('&', '&amp;')
-      text.gsub!('<', '&lt;')
-      text.gsub!('>', '&gt;')
+      #text.gsub!('&', '&amp;')
+      #text.gsub!('<', '&lt;')
+      #text.gsub!('>', '&gt;')
 
       text
     end
@@ -66,6 +66,7 @@ class Messenger
 
 
     def getJson(title, msg, options)
+      the_sanitizer = Rails::Html::FullSanitizer.new
       params = { text: msg }
       #params[:summary] = @summary if @summary
       params[:title] = title
@@ -74,7 +75,19 @@ class Messenger
       attachments = options[:attachment]&.any? ? [options[:attachment]] : []
       facts_array = attachments.first[:fields]
       # rename entries from value to fact (thats how msteams wants it)
-      params[:sections] = facts_array
+      sections = []
+      facts = Array.new
+      title_name = ""
+      facts_array.each do |i|
+        if i[:title] == "Kommentar"
+          title_name = the_sanitizer.sanitize(i[:value]) 
+        else 
+          hsh = {:name=>i[:title],:value=>i[:value]}
+          facts.push(hsh)
+        end
+      end
+      sections = {:title=>title_name,:facts=>facts}
+      params[:sections] = sections
       Rails.logger.warn "info params-sections => #{params[:sections]}"
       Rails.logger.warn "info params-title => #{params[:title]}"
       icon = textfield_for_project options[:project], :messenger_icon
