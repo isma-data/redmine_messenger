@@ -74,22 +74,38 @@ class Messenger
       params[:username] = username if username.present?
       attachments = options[:attachment]&.any? ? [options[:attachment]] : []
       facts_array = attachments.first[:fields]
+      description = the_sanitizer.sanitize(attachments.first[:text])
       # rename entries from value to fact (thats how msteams wants it)
       sections = []
       facts = Array.new
+      sections = Array.new
       title_name = ""
-      facts_array.each do |i|
-        if i[:title] == "Kommentar"
-          title_name = the_sanitizer.sanitize(i[:value]) 
-        else 
-          hsh = {:name=>i[:title],:value=>i[:value]}
-          facts.push(hsh)
+      if facts_array != nil
+        facts_array.each do |i|
+          if i[:title] == "Kommentar"
+            title_name = the_sanitizer.sanitize(i[:value])
+          elsif i[:title] == "Datei"
+            filelink = i[:value]
+            link,name=filelink.split("|")
+            link.gsub!("<","(")
+            name.gsub!(">","]")
+            filelink = "[" + name + link + ")"
+            hsh = {:name=>"Datei",:value=>filelink}
+            facts.push(hsh)
+          else 
+            hsh = {:name=>i[:title],:value=>i[:value]}
+            facts.push(hsh)
+          end
         end
       end
-      sections = {:title=>title_name,:facts=>facts}
+      if description != nil
+        hsh_description = {:name=>"Beschreibung",:value=>description}
+        facts.push(hsh_description)
+      end
+      sections.push({:title=>title_name,:facts=>facts})
       params[:sections] = sections
-      Rails.logger.warn "info params-sections => #{params[:sections]}"
-      Rails.logger.warn "info params-title => #{params[:title]}"
+      Rails.logger.warn "info params complete => #{params}"
+      Rails.logger.warn "info descrption => #{description}"
       icon = textfield_for_project options[:project], :messenger_icon
       if icon.present?
         if icon.start_with? ':'
