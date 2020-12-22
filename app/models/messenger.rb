@@ -31,8 +31,6 @@ class Messenger
     def speak_messenger_old(msg, url, options)
       url ||= RedmineMessenger.settings[:messenger_url]
       return if url.blank? #|| channels.blank?
-      Rails.logger.warn "DEBUG info: msg => #{msg}"
-      Rails.logger.warn "DEBUG info: url => #{url}"
       params = { text: msg, link_names: 1 }
       username = textfield_for_project(options[:project], :messenger_username)
       params[:username] = username if username.present?
@@ -76,7 +74,6 @@ class Messenger
       facts_array = attachments.first[:fields]
       description = the_sanitizer.sanitize(attachments.first[:text])
       # rename entries from value to fact (thats how msteams wants it)
-      sections = []
       facts = Array.new
       sections = Array.new
       title_name = ""
@@ -87,9 +84,9 @@ class Messenger
           elsif i[:title] == "Datei"
             filelink = i[:value]
             link,name=filelink.split("|")
-            link.gsub!("<","(")
-            name.gsub!(">","]")
-            filelink = "[" + name + link + ")"
+            link.gsub!("<","")
+            name.gsub!(">","")
+            filelink = "[" + name +"]"+"("+ link + ")"
             hsh = {:name=>"Datei",:value=>filelink}
             facts.push(hsh)
           else 
@@ -104,8 +101,15 @@ class Messenger
       end
       sections.push({:title=>title_name,:facts=>facts})
       params[:sections] = sections
+
+      # TODO: need the issue object here!
+      values = issue.visible_custom_field_values
+      values.each do |value|
+        if value.custom_field.id == 6 || value.custom_field.id == 7
+          Rails.logger.warn("#{value.custom_field.id}")
+        end	
+      end
       Rails.logger.warn "info params complete => #{params}"
-      Rails.logger.warn "info descrption => #{description}"
       icon = textfield_for_project options[:project], :messenger_icon
       if icon.present?
         if icon.start_with? ':'
@@ -114,8 +118,17 @@ class Messenger
           params[:icon_url] = icon
         end
       end
+      require 'uri'
+      ticket_url = params[:text].dup
+      ticket_url.gsub!(")","")
+      ticket_url = URI.extract(ticket_url)
+      ticket_url = ticket_url.first
       #params[:themeColor] = @color if @color
-      #params[:potentialAction] = @potentialAction if @potentialAction
+      potential_action = Array.new
+      targets = Array.new
+      targets.push({:os=>"default",:uri=>ticket_url})
+      potential_action.push({:@type=>"OpenUri",:name=>"View Ticket",:targets=>targets})
+      params[:potentialAction] = potential_action
       return params.to_json
     end
 

@@ -102,6 +102,7 @@ module RedmineMessenger
           attachment[:fields] = fields if fields.any?
 
           title_for_message = "Update"
+          Rails.logger.warn("attachment => #{attachment}")
           Messenger.speak title_for_message, l(:label_messenger_issue_updated,
                             project_url: Messenger.project_url_markdown(project),
                             #url: send_messenger_mention_url(project, description),
