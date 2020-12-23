@@ -62,11 +62,44 @@ class Messenger
       end
     end
 
+    def show_custom_value(object, html=true)
+      if object.custom_field
+        f = object.custom_field.format.formatted_custom_value(self, object, html)
+        if f.class == Array
+          g = Array.new
+          f.each do |f_element|
+            g.push(f_element[:name])
+          end
+          g.join(", ").to_s
+        else
+          f.to_s
+        end
+      else
+        object.value.to_s
+      end
+    end
 
     def getJson(title, msg, options)
+      issue_id = msg.split(" ").first[2..-1].to_i # new lines for 
+      issue = Issue.find_by id: issue_id # new lines for getting custom field enumerations
+      # getting the desired custom fields for the message
+      # otherwise only updated fields would be displayed
+      values = issue.visible_custom_field_values
+      values.each do |value|
+        if value.custom_field.id == 6
+          @customer_fieldname = value.custom_field.name
+          @customer_value = show_custom_value(value)
+        end
+        if value.custom_field.id == 7
+          @serial_machine_fieldname = value.custom_field.name
+          @serial_machine_value = show_custom_value(value)
+        end	
+      end
+
       the_sanitizer = Rails::Html::FullSanitizer.new
-      params = { text: msg }
-      #params[:summary] = @summary if @summary
+      title = title + ": #{@customer_value}"
+      params = { text: msg + "<br> " + "<p style='padding-left:0px;padding-top:10px;padding-bottom:10px;line-height:150%'>" + "#{@serial_machine_fieldname}: "  +  @serial_machine_value +"</p>" }
+      #params = { summary: msg } # field seems to be not recognized by teams
       params[:title] = title
       username = textfield_for_project(options[:project], :messenger_username)
       params[:username] = username if username.present?
@@ -75,6 +108,9 @@ class Messenger
       description = the_sanitizer.sanitize(attachments.first[:text])
       # rename entries from value to fact (thats how msteams wants it)
       facts = Array.new
+      #facts.push({:name=>@customer_fieldname,:value=>@customer_value})
+      #facts.push({:name=>@serial_machine_fieldname,:value=>@serial_machine_value})
+      #facts.push({:name=>"<hr>",:value=>"<hr>"})
       sections = Array.new
       title_name = ""
       if facts_array != nil
@@ -87,7 +123,7 @@ class Messenger
             link.gsub!("<","")
             name.gsub!(">","")
             filelink = "[" + name +"]"+"("+ link + ")"
-            hsh = {:name=>"Datei",:value=>filelink}
+            hsh = {:name=>"Neue Datei",:value=>filelink}
             facts.push(hsh)
           else 
             hsh = {:name=>i[:title],:value=>i[:value]}
@@ -101,15 +137,6 @@ class Messenger
       end
       sections.push({:title=>title_name,:facts=>facts})
       params[:sections] = sections
-
-      # TODO: need the issue object here!
-      values = issue.visible_custom_field_values
-      values.each do |value|
-        if value.custom_field.id == 6 || value.custom_field.id == 7
-          Rails.logger.warn("#{value.custom_field.id}")
-        end	
-      end
-      Rails.logger.warn "info params complete => #{params}"
       icon = textfield_for_project options[:project], :messenger_icon
       if icon.present?
         if icon.start_with? ':'
@@ -118,6 +145,7 @@ class Messenger
           params[:icon_url] = icon
         end
       end
+
       require 'uri'
       ticket_url = params[:text].dup
       ticket_url.gsub!(")","")
@@ -262,7 +290,11 @@ class Messenger
           title = key
           field_format = CustomField.find(detail.prop_key)&.field_format
 
-          value = IssuesController.helpers.format_value(detail.value, detail.custom_field) if detail.value.present?
+          if detail.value.present?
+            value = IssuesController.helpers.format_value(detail.value, detail.custom_field)
+          else # in case a value was deleted, show the old value (striked out)
+            value = "<s>"+IssuesController.helpers.format_value(detail.old_value, detail.custom_field)+"</s>"
+          end
         end
       elsif detail.property == 'attachment'
         key = 'attachment'
